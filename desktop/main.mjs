@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, session } from "electron";
 import { randomBytes } from "node:crypto";
 import path from "node:path";
+import { installSensorDriver } from "./sensor-driver.mjs";
 import { startServer } from "../server/index.js";
 
 let runtime;
@@ -36,7 +37,18 @@ else {
     .whenReady()
     .then(async () => {
       const token = randomBytes(32).toString("hex");
-      runtime = await startServer({ port: 0, desktop: true, apiToken: token });
+      process.env.MELLO_NATIVE_ROOT = app.isPackaged
+        ? path.join(process.resourcesPath, "native")
+        : path.join(app.getAppPath(), "build", "native");
+      runtime = await startServer({
+        port: 0,
+        desktop: true,
+        apiToken: token,
+        installSensorDriver: () =>
+          installSensorDriver({
+            cacheDirectory: path.join(app.getPath("userData"), "driver-cache"),
+          }),
+      });
       const trustedSession = session.defaultSession;
       trustedSession.setPermissionRequestHandler(
         (contents, permission, callback) => callback(false),

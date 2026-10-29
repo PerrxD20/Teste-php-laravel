@@ -1,6 +1,6 @@
 {
   "name": "mello-pc-diagnostic",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "type": "module",
   "description": "Diagnóstico local de hardware e software com interface em português",
@@ -12,9 +12,14 @@
     "app": "node scripts/launch.mjs",
     "test:browser": "playwright test",
     "desktop": "npm run build && electron .",
-    "dist:win": "npm run build && electron-builder --win --x64 --publish never",
+    "dist:win": "npm run prepare:native && npm run build && electron-builder --win --x64 --publish never",
     "test:desktop": "node scripts/test-desktop.mjs",
-    "verify:win": "node scripts/verify-windows.mjs"
+    "verify:win": "node scripts/verify-windows.mjs",
+    "prepare:smartctl": "node scripts/prepare-smartctl.mjs",
+    "prepare:pawnio": "node scripts/prepare-pawnio.mjs",
+    "build:sensors": "pwsh -File scripts/build-sensors.ps1",
+    "prepare:native": "npm run build:sensors && npm run prepare:smartctl && npm run prepare:pawnio",
+    "test:native": "node scripts/test-native-windows.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

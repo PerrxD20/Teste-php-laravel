@@ -64,7 +64,15 @@ import {
   duration,
   temp,
 } from "./ui";
-import type { Snapshot, Driver, Sample, RamJob, UpdateJob } from "./types";
+import type {
+  Snapshot,
+  Driver,
+  Sample,
+  RamJob,
+  UpdateJob,
+  CollectorStatus as CollectorState,
+  Smart,
+} from "./types";
 import { demoSnapshot, demoDrivers } from "./demo";
 
 type Tab = "system" | "storage" | "drivers" | "ram" | "temperature";
@@ -131,8 +139,9 @@ export default function App() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<
-    "settings" | "help" | "report" | "native" | null
+    "settings" | "help" | "report" | "native" | "sensor-driver" | null
   >(null);
+  const [sensorBusy, setSensorBusy] = useState(false);
   const [lastDuration, setLastDuration] = useState<number | null>(null);
   const [driverList, setDriverList] = useState<Driver[]>([]);
   const [driverLoading, setDriverLoading] = useState(false);
@@ -332,6 +341,18 @@ export default function App() {
       notice((e as Error).message, true);
     }
   }
+  async function refreshSensors() {
+    if (demo || sensorBusy) return;
+    setSensorBusy(true);
+    try {
+      await request("/sensors/restart", {});
+      await scan(false);
+    } catch (e) {
+      notice((e as Error).message, true);
+    } finally {
+      setSensorBusy(false);
+    }
+  }
   async function checkUpdates() {
     if (demo) {
       notice("Saia da demonstração para consultar atualizações reais.");
@@ -397,9 +418,41 @@ export default function App() {
         d.category === driverCategory),
   );
   const categories = [...new Set(activeDrivers.map((d) => d.category))];
-  const tempSensors = snapshot
+  const hasStorageWarning = !!snapshot?.disks.some(
+    (d) => d.smart?.severity === "warning",
+  );
+  const storageWarningOnly =
+    hasStorageWarning &&
+    !snapshot?.disks.some(
+      (d) => d.smart?.severity === "critical" || d.smart?.health === "failed",
+    );
+  const totalAlertCategories =
+    snapshot?.assessment.checks.filter(
+      (c) =>
+        c.state === "critical" ||
+        (c.name === "Armazenamento" && hasStorageWarning),
+    ).length || 0;
+  const integratedTemperatures = snapshot?.temperatures.sensors || [];
+  const hasIntegratedCpu = integratedTemperatures.some((s) =>
+    /^cpu$/i.test(s.hardwareType || ""),
+  );
+  const hasIntegratedGpu = integratedTemperatures.some((s) =>
+    /^gpu/i.test(s.hardwareType || ""),
+  );
+  const extraSensors = (snapshot?.hardwareSensors || []).filter(
+    (s) => !/^temperature$/i.test(s.type || "") && Number.isFinite(s.value),
+  );
+  const tempSensors: {
+    name: string;
+    detail: string;
+    value: number;
+    icon: typeof Cpu;
+    source: string;
+    min?: number | null;
+    max?: number | null;
+  }[] = snapshot
     ? [
-        ...(snapshot.temperatures.cpu !== null
+        ...(snapshot.temperatures.cpu !== null && !hasIntegratedCpu
           ? [
               {
                 name: "Processador",
@@ -411,7 +464,7 @@ export default function App() {
             ]
           : []),
         ...snapshot.graphics
-          .filter((g) => g.temperature !== null)
+          .filter((g) => g.temperature !== null && !hasIntegratedGpu)
           .map((g) => ({
             name: "Placa de vídeo",
             detail: g.model,
@@ -441,10 +494,12 @@ export default function App() {
           : []),
         ...(snapshot.temperatures.sensors || []).map((s) => ({
           name: s.name,
-          detail: s.identifier,
+          detail: s.hardware || s.identifier,
           value: s.value,
           icon: Thermometer,
-          source: "Libre / Open Hardware Monitor",
+          source: snapshot.sensorCollector?.source || "Sensores do sistema",
+          min: s.min,
+          max: s.max,
         })),
       ]
     : [];
@@ -783,7 +838,7 @@ export default function App() {
                     </Panel>
                     <div className="overview-center">
                       <section
-                        className={`status-panel ${snapshot.assessment.critical ? "has-critical" : ""}`}
+                        className={`status-panel ${snapshot.assessment.critical ? "has-critical" : hasStorageWarning ? "has-warning" : ""}`}
                       >
                         <div className="status-top">
                           <span>
@@ -792,10 +847,14 @@ export default function App() {
                           </span>
                           <Badge
                             tone={
-                              snapshot.assessment.critical ? "red" : "green"
+                              snapshot.assessment.critical
+                                ? "red"
+                                : hasStorageWarning
+                                  ? "amber"
+                                  : "green"
                             }
                           >
-                            {snapshot.assessment.critical
+                            {totalAlertCategories
                               ? "Alerta detectado"
                               : "Leitura concluída"}
                           </Badge>
@@ -805,14 +864,18 @@ export default function App() {
                             <h2>
                               {snapshot.assessment.critical
                                 ? "Atenção necessária"
-                                : snapshot.assessment.unavailable > 1
-                                  ? "Seu sistema, mais claro."
-                                  : "Nenhum alerta detectado."}
+                                : hasStorageWarning
+                                  ? "Armazenamento merece atenção."
+                                  : snapshot.assessment.unavailable > 1
+                                    ? "Seu sistema, mais claro."
+                                    : "Nenhum alerta detectado."}
                             </h2>
                             <p>
                               {snapshot.assessment.critical
                                 ? "Há indicadores de falha no armazenamento. Faça backup dos seus arquivos."
-                                : "Uma visão dos indicadores disponíveis. Saúde completa exige testes específicos."}
+                                : hasStorageWarning
+                                  ? "Há indicadores de atenção nas unidades. Consulte os detalhes e mantenha um backup atualizado."
+                                  : "Uma visão dos indicadores disponíveis. Saúde completa exige testes específicos."}
                             </p>
                           </div>
                           <div className="status-orb">
@@ -925,7 +988,11 @@ export default function App() {
                           {snapshot.assessment.checks.map((c, i) => (
                             <span
                               key={i}
-                              className={c.state}
+                              className={
+                                c.name === "Armazenamento" && storageWarningOnly
+                                  ? "warning"
+                                  : c.state
+                              }
                               title={`${c.name}: ${c.detail}`}
                             />
                           ))}
@@ -933,24 +1000,38 @@ export default function App() {
                         <div className="check-list">
                           {snapshot.assessment.checks.map((c) => (
                             <div key={c.name} title={c.detail}>
-                              <span className={`check-icon ${c.state}`}>
+                              <span
+                                className={`check-icon ${c.name === "Armazenamento" && storageWarningOnly ? "warning" : c.state}`}
+                              >
                                 {c.state === "ok" ? (
                                   <Check size={12} />
-                                ) : c.state === "critical" ? (
+                                ) : c.state === "critical" ||
+                                  (c.name === "Armazenamento" &&
+                                    storageWarningOnly) ? (
                                   <TriangleAlert size={12} />
                                 ) : (
                                   <Info size={12} />
                                 )}
                               </span>
                               <span>{c.name}</span>
-                              <small className={c.state}>
-                                {c.state === "ok"
-                                  ? "OK"
-                                  : c.state === "critical"
-                                    ? "Alerta"
-                                    : c.state === "info"
-                                      ? "Identificado"
-                                      : "A verificar"}
+                              <small
+                                className={
+                                  c.name === "Armazenamento" &&
+                                  storageWarningOnly
+                                    ? "warning"
+                                    : c.state
+                                }
+                              >
+                                {c.name === "Armazenamento" &&
+                                storageWarningOnly
+                                  ? "Atenção"
+                                  : c.state === "ok"
+                                    ? "OK"
+                                    : c.state === "critical"
+                                      ? "Alerta"
+                                      : c.state === "info"
+                                        ? "Identificado"
+                                        : "A verificar"}
                               </small>
                             </div>
                           ))}
@@ -970,9 +1051,7 @@ export default function App() {
                             snapshot.assessment.critical ? "red-text" : ""
                           }
                         >
-                          {snapshot.assessment.critical
-                            .toString()
-                            .padStart(2, "0")}
+                          {totalAlertCategories.toString().padStart(2, "0")}
                         </strong>
                         <span className="summary-divider" />
                         <span>Sem leitura</span>
@@ -1204,6 +1283,13 @@ export default function App() {
                         : "Execute a varredura para consultar SMART"}
                     </Badge>
                   </div>
+                  {!demo && snapshot.storageCollector && (
+                    <CollectorStatus
+                      title="Leitura de armazenamento"
+                      status={snapshot.storageCollector}
+                      icon={HardDrive}
+                    />
+                  )}
                   <div className="storage-layout">
                     <div className="disk-sidebar">
                       {snapshot.disks.map((d, i) => (
@@ -1743,6 +1829,43 @@ export default function App() {
                           : "Pausado"}
                     </Badge>
                   </div>
+                  {!demo && snapshot.sensorCollector && (
+                    <CollectorStatus
+                      title="Coletor de sensores integrado"
+                      status={snapshot.sensorCollector}
+                      icon={Thermometer}
+                      actions={
+                        snapshot.platform === "win32" ? (
+                          <>
+                            {isDesktop &&
+                              snapshot.sensorCollector.pawnIOInstalled ===
+                                false && (
+                                <button
+                                  className="button secondary small"
+                                  disabled={sensorBusy || scanning}
+                                  onClick={() => setModal("sensor-driver")}
+                                >
+                                  <ShieldCheck size={14} />
+                                  Preparar acesso aos sensores
+                                </button>
+                              )}
+                            <button
+                              className="button secondary small"
+                              disabled={sensorBusy || scanning}
+                              onClick={refreshSensors}
+                            >
+                              {sensorBusy ? (
+                                <LoaderCircle size={14} className="spin" />
+                              ) : (
+                                <RefreshCw size={14} />
+                              )}
+                              Atualizar sensores
+                            </button>
+                          </>
+                        ) : undefined
+                      }
+                    />
+                  )}
                   {tempSensors.length ? (
                     <>
                       <div className="sensor-grid">
@@ -1770,6 +1893,17 @@ export default function App() {
                               <span>100°C</span>
                             </div>
                             <div className="sensor-source">{s.source}</div>
+                            {"min" in s && (s.min != null || s.max != null) && (
+                              <div className="sensor-range">
+                                <span>
+                                  Mín. <b>{temp(s.min)}</b>
+                                </span>
+                                <span>
+                                  Máx. <b>{temp(s.max)}</b>
+                                </span>
+                                <small>Na sessão do coletor</small>
+                              </div>
+                            )}
                           </Panel>
                         ))}
                       </div>
@@ -1831,6 +1965,61 @@ export default function App() {
                       </Empty>
                     </Panel>
                   )}
+                  {extraSensors.length > 0 && (
+                    <Panel
+                      title="Ventoinhas e outros indicadores"
+                      subtitle="Leituras adicionais disponíveis no hardware; sem faixas de saúde universais"
+                      icon={Fan}
+                    >
+                      <div className="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>COMPONENTE / SENSOR</th>
+                              <th>TIPO</th>
+                              <th>ATUAL</th>
+                              <th>MÍNIMO</th>
+                              <th>MÁXIMO</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {extraSensors.map((sensor, i) => (
+                              <tr key={sensor.identifier || i}>
+                                <td>
+                                  <b>{sensor.name}</b>
+                                  <small className="hardware-sensor-detail">
+                                    {sensor.hardware || sensor.identifier}
+                                  </small>
+                                </td>
+                                <td>{sensorTypeLabel(sensor.type)}</td>
+                                <td>
+                                  {formatSensor(
+                                    sensor.value,
+                                    sensor.type,
+                                    sensor.unit,
+                                  )}
+                                </td>
+                                <td>
+                                  {formatSensor(
+                                    sensor.min,
+                                    sensor.type,
+                                    sensor.unit,
+                                  )}
+                                </td>
+                                <td>
+                                  {formatSensor(
+                                    sensor.max,
+                                    sensor.type,
+                                    sensor.unit,
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Panel>
+                  )}
                   <div className="info-callout">
                     <Fan size={20} />
                     <div>
@@ -1839,9 +2028,12 @@ export default function App() {
                       </strong>
                       <p>
                         As temperaturas SMART são atualizadas na varredura
-                        completa. No Windows, o programa também lê sensores
-                        publicados pelo Libre Hardware Monitor ou Open Hardware
-                        Monitor quando estiverem em execução. No macOS, algumas
+                        completa. No Windows, o coletor integrado usa a
+                        biblioteca LibreHardwareMonitor para consultar os
+                        sensores disponíveis, sem exigir outro monitor aberto.
+                        Alguns sensores de CPU e placa-mãe precisam do driver
+                        PawnIO e de permissões de administrador. A leitura por
+                        WMI continua como alternativa. No macOS, algumas
                         leituras exigem ferramentas específicas do fabricante.
                         As faixas térmicas seguras variam por componente;
                         consulte as especificações do seu modelo.
@@ -1891,10 +2083,65 @@ export default function App() {
                 ? "Conheça o Mello."
                 : modal === "report"
                   ? "Leve os detalhes com você."
-                  : "Uma verificação mais profunda."
+                  : modal === "sensor-driver"
+                    ? "Preparar acesso ao hardware."
+                    : "Uma verificação mais profunda."
           }
           onClose={() => setModal(null)}
         >
+          {modal === "sensor-driver" && (
+            <>
+              <p className="body-copy">
+                Alguns sensores de CPU e placa-mãe precisam do{" "}
+                <strong>PawnIO</strong>, um driver usado pelo coletor
+                LibreHardwareMonitor. Outras leituras podem funcionar sem ele.
+              </p>
+              <div className="info-callout">
+                <ShieldCheck size={19} />
+                <div>
+                  <strong>Instalação com sua confirmação</strong>
+                  <p>
+                    A ação abaixo baixa e abre o instalador oficial do PawnIO. É
+                    necessária uma conexão com a internet. O Windows pode pedir
+                    autorização de administrador. Confira o editor e as etapas
+                    na janela do instalador antes de prosseguir.
+                  </p>
+                </div>
+              </div>
+              <p className="body-copy">
+                Quando terminar, volte à aba Temperatura e selecione{" "}
+                <strong>Atualizar sensores</strong>. Para ampliar o acesso,
+                talvez seja necessário abrir o Mello como administrador. A
+                disponibilidade continua dependendo do seu equipamento.
+              </p>
+              <button
+                className="button primary full"
+                disabled={demo || !isDesktop || sensorBusy}
+                onClick={async () => {
+                  setSensorBusy(true);
+                  try {
+                    const result = await request<{ message: string }>(
+                      "/sensors/driver/install",
+                      { confirmed: true },
+                    );
+                    notice(result.message);
+                    setModal(null);
+                  } catch (e) {
+                    notice((e as Error).message, true);
+                  } finally {
+                    setSensorBusy(false);
+                  }
+                }}
+              >
+                {sensorBusy ? (
+                  <LoaderCircle size={16} className="spin" />
+                ) : (
+                  <ArrowUpRight size={16} />
+                )}
+                Baixar e abrir instalador do PawnIO
+              </button>
+            </>
+          )}
           {modal === "settings" && (
             <>
               <p className="body-copy">
@@ -2172,6 +2419,122 @@ function Shortcut({
     </button>
   );
 }
+function CollectorStatus({
+  title,
+  status,
+  icon: Icon,
+  actions,
+}: {
+  title: string;
+  status: CollectorState;
+  icon: typeof Cpu;
+  actions?: ReactNode;
+}) {
+  const ready = ["ready", "available", "ok", "running"].includes(status.state);
+  const partial = [
+    "partial",
+    "limited",
+    "warning",
+    "degraded",
+    "requires_admin",
+    "requires_driver",
+    "needsAdministrator",
+  ].includes(status.state);
+  return (
+    <section
+      className={`collector-status ${ready ? "ready" : partial ? "partial" : "unavailable"}`}
+      aria-label={title}
+    >
+      <div className="collector-status-heading">
+        <IconBox icon={Icon} tone={ready ? "green" : "cyan"} />
+        <div>
+          <strong>{title}</strong>
+          <p>{status.source || "Leitura local"}</p>
+        </div>
+        <Badge tone={ready ? "green" : partial ? "amber" : "muted"}>
+          {ready
+            ? "Disponível"
+            : partial
+              ? "Leitura limitada"
+              : status.state === "unsupported"
+                ? "Indisponível nesta plataforma"
+                : status.state === "error"
+                  ? "Falha na leitura"
+                  : status.state === "unavailable"
+                    ? "Sem leitura"
+                    : status.state === "missing"
+                      ? "Componente não encontrado"
+                      : "A verificar"}
+        </Badge>
+      </div>
+      {status.diagnostics.length > 0 && (
+        <ul>
+          {status.diagnostics.map((message, i) => (
+            <li key={i}>
+              <Info size={13} />
+              <span>{message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {actions && <div className="collector-actions">{actions}</div>}
+    </section>
+  );
+}
+function sensorTypeLabel(type?: string) {
+  const labels: Record<string, string> = {
+    Fan: "Ventoinha",
+    Voltage: "Tensão",
+    Current: "Corrente",
+    Power: "Potência",
+    Load: "Uso",
+    Clock: "Frequência",
+    Control: "Controle reportado",
+    Data: "Dados",
+    SmallData: "Dados",
+    Throughput: "Transferência",
+    Level: "Nível",
+    Factor: "Fator",
+  };
+  return type ? labels[type] || type : "Sensor";
+}
+function formatSensor(amount: number | null, type?: string, unit?: string) {
+  if (amount == null || !Number.isFinite(amount)) return "—";
+  const units: Record<string, string> = {
+    Fan: "RPM",
+    Voltage: "V",
+    Current: "A",
+    Power: "W",
+    Load: "%",
+    Clock: "MHz",
+    Temperature: "°C",
+  };
+  return `${amount.toLocaleString("pt-BR", { maximumFractionDigits: type === "Voltage" ? 3 : 2 })} ${unit || units[type || ""] || ""}`.trim();
+}
+function storageCounterRows(smart: Smart): [ReactNode, ReactNode][] {
+  const labels: Record<string, string> = {
+    reallocatedSectors: "Setores realocados",
+    pendingSectors: "Setores pendentes",
+    offlineUncorrectableSectors: "Setores incorrigíveis (offline)",
+    reportedUncorrectableErrors: "Erros incorrigíveis reportados",
+    interfaceCrcErrors: "Erros CRC da interface",
+    scsiGrownDefects: "Defeitos remapeados SCSI",
+    scsiReadUncorrectedErrors: "Erros de leitura não corrigidos SCSI",
+    scsiWriteUncorrectedErrors: "Erros de escrita não corrigidos SCSI",
+    nvmeCriticalWarning: "Alerta crítico NVMe (bitmask)",
+    nvmeAvailableSparePercent: "Reserva disponível NVMe",
+    nvmeSpareThresholdPercent: "Limite da reserva NVMe",
+    nvmeMediaErrors: "Erros de mídia / integridade NVMe",
+    nvmeErrorLogEntries: "Entradas no log de erros NVMe",
+    nvmeUnsafeShutdowns: "Desligamentos inseguros NVMe",
+  };
+  return Object.entries(smart.counters || {})
+    .filter(([, n]) => n != null)
+    .map(([key, n]) => [
+      labels[key] || key,
+      `${typeof n === "number" ? n.toLocaleString("pt-BR") : n}${key.endsWith("Percent") ? "%" : ""}`,
+    ]);
+}
 function DiskDetail({
   disk,
   scan,
@@ -2182,6 +2545,21 @@ function DiskDetail({
   scanning: boolean;
 }) {
   const s = disk.smart;
+  const severity =
+    s?.severity ||
+    (s?.health === "failed"
+      ? "critical"
+      : s?.health === "passed"
+        ? "ok"
+        : "unknown");
+  const severityTone =
+    severity === "critical"
+      ? "red"
+      : severity === "warning"
+        ? "amber"
+        : severity === "ok"
+          ? "green"
+          : "muted";
   return (
     <>
       <Panel
@@ -2189,20 +2567,14 @@ function DiskDetail({
         subtitle={`${disk.interface || disk.type || "Disco"} · ${bytes(disk.size)}`}
         icon={HardDrive}
         action={
-          <Badge
-            tone={
-              s?.health === "passed"
-                ? "green"
-                : s?.health === "failed"
-                  ? "red"
-                  : "muted"
-            }
-          >
-            {s?.health === "passed"
-              ? "SMART sem alerta"
-              : s?.health === "failed"
-                ? "SMART indica falha"
-                : "SMART não confirmado"}
+          <Badge tone={severityTone}>
+            {severity === "critical"
+              ? "Indicadores críticos"
+              : severity === "warning"
+                ? "Atenção aos indicadores"
+                : severity === "ok"
+                  ? "Sem alertas nas leituras"
+                  : "Dados insuficientes"}
           </Badge>
         }
       >
@@ -2235,7 +2607,9 @@ function DiskDetail({
                 Total de dados gravados
                 <strong>
                   {s?.totalWrittenBytes == null
-                    ? "Não disponível"
+                    ? s?.totalWrittenBytesExact
+                      ? `${s.totalWrittenBytesExact} bytes`
+                      : "Não disponível"
                     : bytes(s.totalWrittenBytes)}
                 </strong>
               </span>
@@ -2269,6 +2643,22 @@ function DiskDetail({
             ["Número de série", value(disk.serial)],
             ["Firmware", value(disk.firmware)],
             ["Dispositivo", value(disk.device)],
+            [
+              "Protocolo",
+              s?.protocol ? s.protocol.toUpperCase() : "Não informado",
+            ],
+            [
+              "Estado informado pelo firmware",
+              s?.health === "passed"
+                ? "SMART aprovado pelo dispositivo"
+                : s?.health === "failed"
+                  ? "SMART reprovado pelo dispositivo"
+                  : "Não disponível",
+            ],
+            [
+              "Indicador de vida útil",
+              s?.lifeSource || "Não reportado / sem atributo reconhecido",
+            ],
             ["Dias restantes de vida", "Não estimável com segurança"],
             [
               "Fonte dos indicadores",
@@ -2286,9 +2676,10 @@ function DiskDetail({
           <div className="smart-setup">
             <Info size={18} />
             <p>
-              Execute a varredura completa. Instale smartmontools no computador
-              para leituras SMART; algumas unidades exigem permissões de
-              administrador.
+              Execute a varredura completa para consultar o leitor SMART
+              integrado no Windows. Algumas unidades e controladores exigem que
+              o Mello seja aberto como administrador; outros não expõem esses
+              dados.
             </p>
             <button
               className="button secondary small"
@@ -2302,6 +2693,60 @@ function DiskDetail({
         )}
         {s?.error && <p className="panel-footnote">{s.error}</p>}
       </Panel>
+      {s?.summary && (
+        <Panel
+          title="Avaliação dos indicadores"
+          subtitle="A avaliação considera evidências reportadas, sem prever a data de falha"
+          icon={ShieldCheck}
+          action={
+            <Badge tone={severityTone}>
+              {s.readStatus === "partial"
+                ? "Leitura parcial"
+                : s.readStatus === "unavailable"
+                  ? "Sem leitura"
+                  : "Leitura disponível"}
+            </Badge>
+          }
+        >
+          <p className={`storage-assessment-summary ${severity}`}>
+            {s.summary}
+          </p>
+          {s.evidence && s.evidence.length > 0 && (
+            <ul className="smart-evidence">
+              {[...s.evidence]
+                .sort(
+                  (a, b) =>
+                    ({ critical: 0, warning: 1, unknown: 2, info: 3, ok: 4 })[
+                      a.severity
+                    ] -
+                    { critical: 0, warning: 1, unknown: 2, info: 3, ok: 4 }[
+                      b.severity
+                    ],
+                )
+                .map((item, i) => (
+                  <li className={item.severity} key={`${item.code}-${i}`}>
+                    {item.severity === "critical" ||
+                    item.severity === "warning" ? (
+                      <TriangleAlert size={15} />
+                    ) : (
+                      <Info size={15} />
+                    )}
+                    <span>{item.message}</span>
+                  </li>
+                ))}
+            </ul>
+          )}
+        </Panel>
+      )}
+      {s?.counters && Object.values(s.counters).some((v) => v != null) && (
+        <Panel
+          title="Contadores de integridade"
+          subtitle="Contadores do dispositivo; valores históricos não indicam, por si só, uma falha atual"
+          icon={Database}
+        >
+          <DetailRows rows={storageCounterRows(s)} />
+        </Panel>
+      )}
       <Panel
         title="Atributos SMART"
         subtitle="Valores reportados pelo dispositivo, sem normalização inventada"

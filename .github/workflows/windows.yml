@@ -6,6 +6,7 @@ on:
       - src/**
       - server/**
       - desktop/**
+      - native/**
       - build/**
       - scripts/**
       - tests/**
@@ -33,6 +34,9 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.403"
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
       - name: Build interface for integration tests
@@ -41,6 +45,8 @@ jobs:
         run: npm test
       - name: Build Windows installer and portable
         run: npm run dist:win
+      - name: Test incorporated native collectors
+        run: npm run test:native
       - name: Verify complete distribution and generate hashes
         run: npm run verify:win
       - name: Test packaged Windows application
@@ -71,6 +77,7 @@ jobs:
             release/*-Portable-*.exe
             release/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 7
       - name: Publish downloadable Windows release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -83,5 +90,5 @@ jobs:
             gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Mello PC Diagnostic $version" --notes-file RELEASE-NOTES.md
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
-          gh release upload $tag "release/Mello-PC-Diagnostic-Setup-$version-x64.exe" "release/Mello-PC-Diagnostic-Portable-$version-x64.exe" 'release/SHA256SUMS.txt' --repo $env:GITHUB_REPOSITORY --clobber
+          gh release upload $tag "release/Mello-PC-Diagnostic-Setup-$version-x64.exe" "release/Mello-PC-Diagnostic-Portable-$version-x64.exe" 'release/SHA256SUMS.txt' 'build/native/smartctl/source/smartmontools-7.5.tar.gz' --repo $env:GITHUB_REPOSITORY --clobber
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

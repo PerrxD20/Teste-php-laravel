@@ -1,9 +1,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import os from "node:os";
+import path from "node:path";
 import { readdir, readFile } from "node:fs/promises";
 import si from "systeminformation";
 import { smartSummary, assess, knownNumber } from "./health.js";
+import { smartctlExecutable } from "./native-tools.js";
+import { sensorClient } from "./sensor-client.js";
+export const stopNativeCollectors = () => sensorClient.stop();
+export const restartNativeCollectors = () => sensorClient.stop();
 const exec = promisify(execFile);
 export async function command(file, args, timeout = 15000) {
   try {
@@ -122,16 +127,27 @@ export async function driverUpdates() {
   };
 }
 async function smartDisks() {
+  const executable = await smartctlExecutable();
   try {
-    const scan = JSON.parse(await command("smartctl", ["--scan", "-j"]));
-    const devices = list(scan.devices).slice(0, 12);
-    return await Promise.all(
+    const dbArgs = path.isAbsolute(executable)
+      ? ["-B", path.join(path.dirname(executable), "drivedb.h")]
+      : [];
+    const scan = JSON.parse(
+      await command(executable, [...dbArgs, "--scan-open", "-j"]),
+    );
+    const devices = list(scan.devices).slice(0, 32);
+    const results = await Promise.all(
       devices.map(async (device) => {
         try {
-          const args = ["-a", "-j", "-n", "standby"];
+          const args = ["-x", "-j", "-n", "standby"];
+          if (path.isAbsolute(executable))
+            args.unshift(
+              "-B",
+              path.join(path.dirname(executable), "drivedb.h"),
+            );
           if (device.type) args.push("-d", device.type);
           args.push(device.name);
-          const raw = JSON.parse(await command("smartctl", args, 10000));
+          const raw = JSON.parse(await command(executable, args, 15000));
           return {
             device: device.name,
             ...smartSummary(raw),
@@ -155,11 +171,39 @@ async function smartDisks() {
         }
       }),
     );
+    const diagnostics = list(scan.messages)
+      .map((m) => m.string)
+      .filter(Boolean);
+    if (list(scan.devices).length > 32)
+      diagnostics.push("A leitura foi limitada às primeiras 32 unidades.");
+    if (!devices.length)
+      diagnostics.push(
+        "Nenhuma unidade física SMART acessível. Algumas unidades exigem executar o Mello como administrador.",
+      );
+    return {
+      disks: results,
+      state: results.some((d) => d.readStatus === "available")
+        ? "ok"
+        : results.length
+          ? "partial"
+          : "unavailable",
+      source: path.isAbsolute(executable)
+        ? "smartmontools incorporado"
+        : "smartmontools do sistema",
+      diagnostics,
+    };
   } catch {
-    return [];
+    return {
+      disks: [],
+      state: "unavailable",
+      source: "smartmontools",
+      diagnostics: [
+        "Não foi possível acessar o coletor SMART. Verifique a instalação e as permissões de acesso aos discos.",
+      ],
+    };
   }
 }
-async function nativeSensors() {
+async function wmiSensors() {
   if (process.platform !== "win32") return [];
   try {
     const rows = await powershell(
@@ -169,6 +213,42 @@ async function nativeSensors() {
   } catch {
     return [];
   }
+}
+async function nativeSensors() {
+  const result = await sensorClient.sample();
+  const hardwareSensors = (result.sensors || []).filter(
+    (s) => typeof s.value === "number" && Number.isFinite(s.value),
+  );
+  const temperatures = hardwareSensors.filter(
+    (s) => String(s.type).toLowerCase() === "temperature" && s.value >= 0,
+  );
+  const fallback =
+    process.platform === "win32" && temperatures.length === 0
+      ? await wmiSensors()
+      : [];
+  return {
+    sensors: temperatures.length ? temperatures : fallback,
+    hardwareSensors,
+    status: {
+      state: temperatures.length
+        ? result.state === "partial"
+          ? "partial"
+          : "ok"
+        : fallback.length
+          ? "partial"
+          : result.state,
+      source: temperatures.length
+        ? "LibreHardwareMonitorLib incorporada"
+        : fallback.length
+          ? "WMI (compatibilidade)"
+          : "LibreHardwareMonitorLib incorporada",
+      diagnostics: result.diagnostics || [],
+      isAdministrator: result.capabilities?.elevated,
+      pawnIOInstalled: result.capabilities?.pawnIOInstalled,
+      pawnIOVersion: result.capabilities?.pawnIOVersion,
+      libraryVersion: result.libraryVersion,
+    },
+  };
 }
 async function windowsReliability() {
   if (process.platform !== "win32") return [];
@@ -180,6 +260,18 @@ async function windowsReliability() {
   } catch {
     return [];
   }
+}
+function coreTemperatures(nativeCores, sensors) {
+  if (nativeCores?.some((v) => knownNumber(v) !== null))
+    return nativeCores.map(knownNumber);
+  return sensors
+    .filter(
+      (s) =>
+        /core #?\d+/i.test(s.name) &&
+        (/cpu/i.test(s.hardwareType || "") ||
+          /(?:intel|amd)cpu/i.test(s.identifier || "")),
+    )
+    .map((s) => knownNumber(s.value));
 }
 async function safe(fn, fallback) {
   try {
@@ -207,8 +299,8 @@ export async function collect(deep = false) {
     usb,
     processes,
     reliability,
-    smart,
-    sensors,
+    smartResult,
+    sensorResult,
   ] = await Promise.all([
     safe(() => si.system(), {}),
     safe(() => si.osInfo(), {}),
@@ -227,21 +319,40 @@ export async function collect(deep = false) {
     safe(() => si.usb(), []),
     safe(() => si.processes(), {}),
     deep ? windowsReliability() : [],
-    deep ? smartDisks() : [],
+    deep
+      ? smartDisks()
+      : {
+          disks: [],
+          state: "idle",
+          source: "smartmontools incorporado",
+          diagnostics: [
+            "Execute a varredura completa para ler os discos físicos.",
+          ],
+        },
     nativeSensors(),
   ]);
+  const sensors = sensorResult.sensors;
+  const smart = smartResult.disks;
   const diskResults = disks.map((d) => {
     const match = smart.find(
       (s) => (s.serial && s.serial === d.serialNum) || s.device === d.device,
     );
     const native = reliability.find(
-      (r) => r.serial?.trim() === d.serialNum?.trim() || r.name === d.name,
+      (r) =>
+        (r.serial?.trim() &&
+          d.serialNum?.trim() &&
+          r.serial.trim() === d.serialNum.trim()) ||
+        (r.name && d.name && r.name === d.name),
     );
     const base =
       match ||
       (native
         ? {
             ...smartSummary(),
+            readStatus: "partial",
+            severity: "unknown",
+            summary:
+              "Indicadores parciais do Windows; a leitura SMART completa não foi confirmada.",
             health:
               native.health === "Healthy"
                 ? "passed"
@@ -399,14 +510,22 @@ export async function collect(deep = false) {
       model: board.model,
       version: board.version,
     },
+    storageCollector: {
+      state: smartResult.state,
+      source: smartResult.source,
+      diagnostics: smartResult.diagnostics,
+    },
+    sensorCollector: sensorResult.status,
+    hardwareSensors: sensorResult.hardwareSensors,
     temperatures: {
       cpu:
         knownNumber(temp.main) ??
         knownNumber(
-          sensors.find((s) => /cpu package|cpu.*tctl|cpu.*tdie/i.test(s.name))
-            ?.value,
+          sensors.find((s) =>
+            /cpu package|(?:cpu|core).*tctl|(?:cpu|core).*tdie/i.test(s.name),
+          )?.value,
         ),
-      cores: (temp.cores || []).map(knownNumber),
+      cores: coreTemperatures(temp.cores, sensors),
       max: knownNumber(temp.max),
       socket: (temp.socket || []).map(knownNumber),
       chipset: knownNumber(temp.chipset),
@@ -440,13 +559,16 @@ export async function collect(deep = false) {
 // Frequent polling refreshes dynamic readings only. SMART and firmware inventory
 // are collected on explicit scans, avoiding repeated disk queries every 5 seconds.
 export async function refresh(snapshot) {
-  const [memory, load, temperature, graphics, sensors] = await Promise.all([
-    safe(() => si.mem(), null),
-    safe(() => si.currentLoad(), null),
-    safe(() => si.cpuTemperature(), null),
-    safe(() => si.graphics(), null),
-    nativeSensors(),
-  ]);
+  const [memory, load, temperature, graphics, sensorResult] = await Promise.all(
+    [
+      safe(() => si.mem(), null),
+      safe(() => si.currentLoad(), null),
+      safe(() => si.cpuTemperature(), null),
+      safe(() => si.graphics(), null),
+      nativeSensors(),
+    ],
+  );
+  const sensors = sensorResult.sensors;
   const next = {
     ...snapshot,
     collectedAt: new Date().toISOString(),
@@ -461,14 +583,17 @@ export async function refresh(snapshot) {
           swapUsed: memory.swapused,
         }
       : snapshot.memory,
+    sensorCollector: sensorResult.status,
+    hardwareSensors: sensorResult.hardwareSensors,
     temperatures: {
       cpu:
         knownNumber(temperature?.main) ??
         knownNumber(
-          sensors.find((s) => /cpu package|cpu.*tctl|cpu.*tdie/i.test(s.name))
-            ?.value,
+          sensors.find((s) =>
+            /cpu package|(?:cpu|core).*tctl|(?:cpu|core).*tdie/i.test(s.name),
+          )?.value,
         ),
-      cores: (temperature?.cores || []).map(knownNumber),
+      cores: coreTemperatures(temperature?.cores, sensors),
       max: knownNumber(temperature?.max),
       socket: (temperature?.socket || []).map(knownNumber),
       chipset: knownNumber(temperature?.chipset),

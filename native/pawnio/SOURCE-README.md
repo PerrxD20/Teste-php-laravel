@@ -1,0 +1,17 @@
+# PawnIO driver download and source notices
+
+Mello **does not bundle or redistribute the PawnIO installer wrapper**. Its package includes only pinned download/signature metadata, license/attribution notices and the open-source driver/library sources described below. PawnIO is an optional upstream driver, not a Mello driver.
+
+Upstream installer: https://github.com/namazso/PawnIO.Setup/releases/tag/2.2.0
+
+The application may download the unchanged official `PawnIO_setup.exe` directly from that upstream release into the user's application-data cache only after the user explicitly requests the optional driver installation. It must verify the pinned SHA-256 and require Windows `Get-AuthenticodeSignature` **Valid** plus the exact pinned upstream signer thumbprint immediately before launching. The official installer is opened with its normal interface/UAC consent; do not use silent install flags. No driver installation is performed during startup, ordinary sensor polling or distribution preparation.
+
+The SHA-256 in `manifest.json` was published by GitHub for that release asset. The build checks that upstream installer in its private build cache with the same SHA-256 and Windows Authenticode gates, but deliberately does **not** copy the installer into the staged application. Certificates/signatures are never removed or changed. Linux `--download-only` verifies download hashes, does not claim Authenticode verification and stages no distribution. The application must repeat integrity/signature validation on the file it actually downloads for the user; build verification does not replace that check.
+
+PawnIO's copyright/license notice is in `UPSTREAM-PawnIO-README.md`; the GPL v2 text is in `COPYING.PawnIO`. PawnIO is GPL-2.0-or-later, with the upstream exception for independent modules communicating solely through its device-I/O-control interface. The exception does not exempt modules loaded into PawnIO over its Pawn interface. See the complete upstream notice, not this summary, for the governing terms.
+
+The package includes open-source driver/library/utility sources and build descriptions in `source/PawnIO-2.2.0-source.zip` (exact commit `5cdf470831fdfff3f7f1d06363ca6b230f3bf35a`, upstream tag 2.2.0). Its required `PawnPP` submodule is separately included in `source/PawnPP-e64e4c3-source.zip` (commit `e64e4c37b2d8ba0d8ee57205faf8183aee12c438`). PawnPP is MPL-2.0; its license is in `LICENSE.PawnPP` and the archive. Extract the PawnIO archive, then extract the contents of the PawnPP archive into that source root's `PawnPP` directory. Build inputs/CMake scripts are preserved, with no downstream changes. Building a driver requires the upstream Windows CMake/MSVC/WDK prerequisites; Microsoft signing keys/certificates are not provided.
+
+The upstream `PawnIO.Setup` repository hosts official release binaries and only a README. It does not publish a buildable installer-wrapper source tree or an independently explicit wrapper-redistribution grant. Therefore Mello supplies an explicit-user-action upstream download instead of embedding that installer. The source archives included here contain the actual PawnIO driver, PawnIOLib, PawnIOUtil and PawnPP; Mello does not claim they contain the wrapper's source. Collector module sources are separately included with that component's notices.
+
+Preserve these notices, source archives and metadata when redistributing the open-source sources or the Mello component which refers to them.

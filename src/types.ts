@@ -3,8 +3,43 @@ export type Check = {
   state: "ok" | "info" | "unknown" | "critical";
   detail: string;
 };
+export type CollectorStatus = {
+  state: string;
+  source: string;
+  diagnostics: string[];
+  isAdministrator?: boolean;
+  pawnIOInstalled?: boolean;
+};
+export type HardwareSensor = {
+  name: string;
+  value: number;
+  min: number | null;
+  max: number | null;
+  identifier: string;
+  hardware?: string;
+  hardwareType?: string;
+  type?: string;
+  unit?: string;
+};
+export type SmartEvidence = {
+  code: string;
+  severity: "ok" | "warning" | "critical" | "unknown" | "info";
+  message: string;
+  value?: number | string | null;
+  unit?: string;
+};
 export type Smart = {
   measuredAt?: string;
+  protocol?: string | null;
+  readStatus?: "available" | "partial" | "unavailable";
+  severity?: "ok" | "warning" | "critical" | "unknown";
+  summary?: string;
+  evidence?: SmartEvidence[];
+  warnings?: SmartEvidence[];
+  counters?: Record<string, number | string | null>;
+  lifeSource?: string | null;
+  writesSource?: string | null;
+  totalWrittenBytesExact?: string | null;
   health: string;
   lifePercent: number | null;
   totalWrittenBytes: number | null;
@@ -29,6 +64,9 @@ export type Snapshot = {
   platform: string;
   scope: string;
   deep: boolean;
+  sensorCollector?: CollectorStatus;
+  storageCollector?: CollectorStatus;
+  hardwareSensors?: HardwareSensor[];
   host: {
     name: string;
     user: string;
@@ -125,13 +163,7 @@ export type Snapshot = {
     max: number | null;
     socket: (number | null)[];
     chipset: number | null;
-    sensors?: {
-      name: string;
-      value: number;
-      min: number | null;
-      max: number | null;
-      identifier: string;
-    }[];
+    sensors?: HardwareSensor[];
   };
   battery: {
     percent: number;

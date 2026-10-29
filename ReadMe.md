@@ -6,8 +6,8 @@ Aplicativo local de diagnóstico com interface em português, inspirado na refer
 
 Na página [Releases do GitHub](https://github.com/PerrxD20/Teste-php-laravel/releases), baixe a versão publicada:
 
-- `Mello-PC-Diagnostic-Setup-1.1.0-x64.exe`: instala o programa, permite escolher a pasta e cria atalhos e desinstalador.
-- `Mello-PC-Diagnostic-Portable-1.1.0-x64.exe`: abre sem instalação. A extração inicial pode levar alguns segundos.
+- `Mello-PC-Diagnostic-Setup-1.2.0-x64.exe`: instala o programa, permite escolher a pasta e cria atalhos e desinstalador.
+- `Mello-PC-Diagnostic-Portable-1.2.0-x64.exe`: abre sem instalação. A extração inicial pode levar alguns segundos.
 
 Requer Windows 10/11 de 64 bits. A interface, o coletor e o runtime estão incluídos. O usuário final não precisa instalar Node.js nem manter um terminal aberto. O aplicativo abre em uma janela própria; ao encerrar, seu coletor também é encerrado. Os relatórios são salvos pelo diálogo de arquivos do sistema.
 
@@ -43,7 +43,9 @@ Não é possível coletar literalmente todas as informações em todos os dispos
 
 ### SMART e vida útil
 
-Instale **smartmontools** e deixe `smartctl` disponível no PATH para ampliar as leituras da varredura completa:
+A versão Windows inclui **smartmontools 7.5**, `smartctl` x64 e o banco de modelos. A primeira análise consulta SMART automaticamente; a **Varredura completa** atualiza os indicadores. A avaliação distingue firmware aprovado, indicadores parciais, aviso e falha crítica e lista as evidências (NVMe/SATA/SCSI, reserva, desgaste nominal, erros de mídia, setores pendentes/realocados e comunicação). A leitura não inicia autotestes nem grava configurações no disco.
+
+Para executar a partir do código-fonte em outras plataformas, instale **smartmontools** e deixe `smartctl` disponível no PATH:
 
 - macOS com Homebrew: `brew install smartmontools`.
 - Windows: instalador oficial do smartmontools; inclua a pasta do executável no PATH.
@@ -55,7 +57,11 @@ Porcentagem de desgaste representa o indicador do fabricante, **não uma garanti
 
 ### Temperaturas
 
-O Windows pode precisar do **Libre Hardware Monitor** ou **Open Hardware Monitor** em execução para publicar sensores em WMI. O coletor lê os namespaces correspondentes quando disponíveis, sem baixar nem instalar drivers de kernel. Sensores não publicados pelo firmware permanecem indisponíveis. No Mac, principalmente Apple Silicon, a API padrão pode não expor temperaturas; não foi implementado um driver proprietário de sensores. Limites seguros dependem do modelo e não são inferidos de uma faixa universal.
+A versão Windows inclui um coletor próprio **LibreHardwareMonitorLib 0.9.6**, executado em processo separado por um protocolo JSON restrito a leitura de sensores. O runtime .NET já acompanha o aplicativo. Não é necessário abrir outro monitor. Temperaturas por componente/núcleo, mínimo/máximo da sessão, rotações, tensões e outras leituras são mostradas conforme o equipamento disponibilizar.
+
+Alguns sensores de CPU/placa-mãe exigem **PawnIO 2.0+** e permissões administrativas. Quando necessário, a aba Temperatura oferece um botão com confirmação para baixar o instalador oficial **PawnIO 2.2.0**. Esse download opcional exige internet; é validado por SHA-256 fixo, assinatura Authenticode válida e certificado de editor esperado antes de abrir o instalador normal do Windows/UAC. O programa não instala drivers silenciosamente, não eleva o coletor automaticamente e não altera controles de ventoinhas/tensão. Após instalar, atualize os sensores; se a leitura exigir, abra o Mello como administrador. O instalador PawnIO não é redistribuído dentro do pacote.
+
+A compatibilidade WMI com monitores externos permanece como alternativa, não requisito. Sensores não publicados pelo firmware permanecem indisponíveis. No Mac, principalmente Apple Silicon, a API padrão pode não expor temperaturas; não foi implementado um driver proprietário de sensores. Limites seguros dependem do modelo e não são inferidos de uma faixa universal.
 
 ### Drivers no Windows e macOS
 
@@ -102,10 +108,14 @@ npm run dist:win
 npm run verify:win
 ```
 
-`dist:win` gera o instalador NSIS e o executável portátil para Windows x64 na pasta `release/`. A compilação não publica automaticamente arquivos (`--publish never`). A edição de ícone e metadados PE é feita pelo hook `build/after-pack.mjs`, preservando a verificação dos downloads oficiais do Electron; o aplicativo resultante é explicitamente não assinado. No Linux, a geração do desinstalador NSIS exige Wine 64; a execução de testes da janela exige um display/Xvfb. Windows é o host recomendado para reproduzir a distribuição.
+`dist:win` gera o instalador NSIS e o executável portátil para Windows x64 na pasta `release/`. É preciso .NET SDK **10.0.403** e PowerShell para compilar o coletor (somente no desenvolvimento). `prepare:native` publica o helper self-contained, prepara smartmontools com banco/fontes/licença e verifica a assinatura do instalador oficial PawnIO no Windows, copiando apenas seus metadados para o pacote. A compilação não publica automaticamente arquivos (`--publish never`). A edição de ícone e metadados PE é feita pelo hook `build/after-pack.mjs`, preservando a verificação dos downloads oficiais do Electron; o aplicativo resultante é explicitamente não assinado. No Linux, a geração do desinstalador NSIS exige Wine 64; a execução de testes da janela exige um display/Xvfb. Windows é o host recomendado para reproduzir a distribuição.
 
 A automação `.github/workflows/windows.yml` usa um runner Windows para compilar, verificar os arquivos, testar a janela e a RAM na aplicação empacotada, instalar em uma pasta temporária, testar a versão instalada e publicar os dois executáveis e hashes em Releases. Ela é acionada por alterações do aplicativo na branch `mello-pc-diagnostic` e pode ser disparada manualmente. A publicação usa o token do próprio GitHub Actions; não inclua tokens pessoais no repositório.
 
 O coletor desktop usa uma porta local livre e exige um token aleatório anexado apenas pela sessão da janela. O renderer tem sandbox e isolamento de contexto, não tem integração Node e não aceita navegação externa. O código-fonte mantém o modo web de desenvolvimento anterior. `npm run test:desktop` testa a janela; `MELLO_DESKTOP_EXECUTABLE` permite apontar para a versão instalada ou empacotada.
 
 O instalador `.exe` é específico para Windows; as funções de coleta para macOS permanecem no código-fonte. Uma distribuição `.dmg` assinada/notarizada não faz parte desta compilação.
+
+## Componentes nativos e licenças
+
+Os componentes ficam em `resources/native/` na distribuição: `sensors/` (coletor .NET/LibreHardwareMonitorLib e avisos/licenças), `smartctl/` (executável, banco, GPL e fonte correspondente completa) e `pawnio/` (metadados e avisos/fontes). A fonte smartmontools também é publicada separadamente na release. A biblioteca LHM é MPL-2.0; dependências PawnIO.Modules/HIDSharp e runtime mantêm suas próprias licenças e avisos. Consulte `native/**` para versões, hashes, origem e obrigações. Não são incorporados binários do CrystalDiskInfo ou Hard Disk Sentinel; o Mello aplica regras próprias documentadas pelas evidências de cada leitura.

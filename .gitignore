@@ -6,3 +6,7 @@ playwright-report/
 .env
 release/
 .desktop-test/
+build/native/
+build/download-cache/
+native/**/bin/
+native/**/obj/

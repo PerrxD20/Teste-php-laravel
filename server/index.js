@@ -3,9 +3,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
 import { execFile } from "node:child_process";
-import { collect, refresh, drivers, driverUpdates } from "./native.js";
+import {
+  collect,
+  refresh,
+  drivers,
+  driverUpdates,
+  stopNativeCollectors,
+  restartNativeCollectors,
+} from "./native.js";
 import { timingSafeEqual } from "node:crypto";
-export function createApp({ desktop = false, apiToken = null } = {}) {
+export function createApp({
+  desktop = false,
+  apiToken = null,
+  installSensorDriver = null,
+} = {}) {
   const app = express();
   if (desktop)
     app.use((req, res, next) => {
@@ -81,7 +92,7 @@ export function createApp({ desktop = false, apiToken = null } = {}) {
     }),
   );
   app.get("/api/snapshot", async (req, res) => {
-    if (!cached) return res.json(await scan(false));
+    if (!cached) return res.json(await scan(true));
     if (collecting) return res.json(await collecting);
     if (Date.now() - Date.parse(cached.collectedAt) < 3000)
       return res.json(cached);
@@ -176,6 +187,35 @@ export function createApp({ desktop = false, apiToken = null } = {}) {
         "A abertura do Diagnóstico de Memória do Windows foi solicitada. Escolha quando executar na janela do Windows.",
     });
   });
+  app.post("/api/sensors/restart", (req, res) => {
+    restartNativeCollectors();
+    res.json({
+      message:
+        "Coletor reiniciado. Faça uma nova análise para atualizar os sensores.",
+    });
+  });
+  app.post("/api/sensors/driver/install", async (req, res) => {
+    if (req.body?.confirmed !== true)
+      return res.status(400).json({
+        error: "Confirme a abertura do instalador oficial de sensores.",
+      });
+    if (!desktop || !installSensorDriver || process.platform !== "win32")
+      return res.status(400).json({
+        error:
+          "O instalador de sensores está disponível na versão desktop para Windows.",
+      });
+    try {
+      res.json(await installSensorDriver());
+    } catch (error) {
+      res
+        .status(400)
+        .json({
+          error:
+            error.message ||
+            "Não foi possível concluir a instalação do driver de sensores.",
+        });
+    }
+  });
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   app.use(express.static(path.join(root, "dist")));
   app.get("/{*path}", (req, res) => {
@@ -195,6 +235,7 @@ export function createApp({ desktop = false, apiToken = null } = {}) {
     app,
     stopJobs: async () => {
       if (activeRam) await activeRam.terminate();
+      stopNativeCollectors();
     },
   };
 }
@@ -203,8 +244,13 @@ export async function startServer({
   port = 4318,
   desktop = false,
   apiToken = null,
+  installSensorDriver = null,
 } = {}) {
-  const { app, stopJobs } = createApp({ desktop, apiToken });
+  const { app, stopJobs } = createApp({
+    desktop,
+    apiToken,
+    installSensorDriver,
+  });
   const server = await new Promise((resolve, reject) => {
     const listener = app.listen(port, "127.0.0.1", () => resolve(listener));
     listener.once("error", reject);

@@ -36,6 +36,23 @@ const manifest = JSON.parse(
 );
 assert.equal(manifest.version, pkg.version);
 assert.equal(manifest.main, "desktop/main.mjs");
+const native = path.join(runtime, "resources/native");
+for (const file of [
+  "sensors/Mello.SensorCollector.exe",
+  "sensors/LibreHardwareMonitorLib.dll",
+  "sensors/coreclr.dll",
+  "smartctl/smartctl.exe",
+  "smartctl/drivedb.h",
+  "smartctl/COPYING.txt",
+  "smartctl/source/smartmontools-7.5.tar.gz",
+  "pawnio/manifest.json",
+])
+  await fs.access(path.join(native, file));
+const driverManifest = JSON.parse(
+  await fs.readFile(path.join(native, "pawnio/manifest.json"), "utf8"),
+);
+assert.equal(driverManifest.installerBundled, false);
+assert.equal(driverManifest.authenticode.status, "Valid");
 const names = ["Setup", "Portable"].map(
   (kind) => `Mello-PC-Diagnostic-${kind}-${pkg.version}-x64.exe`,
 );

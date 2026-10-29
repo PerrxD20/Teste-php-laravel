@@ -46,3 +46,10 @@ nsis:
 portable:
   artifactName: Mello-PC-Diagnostic-Portable-${version}-${arch}.exe
   requestExecutionLevel: user
+extraResources:
+  - from: build/native/sensors
+    to: native/sensors
+  - from: build/native/smartctl
+    to: native/smartctl
+  - from: build/native/pawnio
+    to: native/pawnio
