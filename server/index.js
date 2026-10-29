@@ -207,13 +207,11 @@ export function createApp({
     try {
       res.json(await installSensorDriver());
     } catch (error) {
-      res
-        .status(400)
-        .json({
-          error:
-            error.message ||
-            "Não foi possível concluir a instalação do driver de sensores.",
-        });
+      res.status(400).json({
+        error:
+          error.message ||
+          "Não foi possível concluir a instalação do driver de sensores.",
+      });
     }
   });
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -261,9 +259,15 @@ export async function startServer({
     url,
     close: async () => {
       await stopJobs();
-      await new Promise((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      const forceClose = setTimeout(() => server.closeAllConnections(), 2000);
+      forceClose.unref();
+      try {
+        await new Promise((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      } finally {
+        clearTimeout(forceClose);
+      }
     },
   };
 }

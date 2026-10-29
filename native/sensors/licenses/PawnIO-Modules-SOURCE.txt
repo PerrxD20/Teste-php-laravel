@@ -1,3 +1,16 @@
-Signed PawnIO modules from the official repository, belonging to the 0.1.6 release:
+PawnIO.Modules corresponding-source provenance
 
-https://github.com/namazso/PawnIO.Modules/releases/tag/0.1.6
+All 12 signed module binaries embedded by LibreHardwareMonitorLib 0.9.6 match
+the official PawnIO.Modules 0.2.2 release byte-for-byte.
+Source commit: e12a858d952461ee2e919897cacbff7f905fe370
+Source: https://github.com/namazso/PawnIO.Modules/tree/0.2.2
+Official binaries: https://github.com/namazso/PawnIO.Modules/releases/tag/0.2.2
+
+The upstream LHM resource README still says 0.1.6, but that older source does not
+contain IsaBridgeEC and is not the matching corresponding source.
+The complete 0.2.2 source archive is included under source/ in this distribution.
+It includes .p modules, .inc headers, .github/workflows/ci.yml build instructions,
+the Pawn compiler source RPM and its binary package. There are no git submodules
+and PawnPP is not used at this release.
+
+See source/SOURCE-PROVENANCE.json for archive digests and module hashes.

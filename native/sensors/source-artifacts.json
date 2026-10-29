@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "library": {
+    "name": "LibreHardwareMonitorLib",
+    "version": "0.9.6",
+    "sourceCommit": "3d331e3370efb858411f19511373eff65a218701"
+  },
+  "pawnIOModules": {
+    "version": "0.2.2",
+    "sourceCommit": "e12a858d952461ee2e919897cacbff7f905fe370",
+    "license": "LGPL-2.1-or-later",
+    "provenance": "All 12 module binaries in the v0.9.6 source resources match the official 0.2.2 release archive byte-for-byte. The upstream resources README claiming 0.1.6 is stale.",
+    "officialBinaryArchive": {
+      "url": "https://github.com/namazso/PawnIO.Modules/releases/download/0.2.2/release_0_2_2.zip",
+      "sha256": "b9e05e52c07fd76b7f9db3da0f542b710d55511dc995d4f4ca08e9179b4c4032"
+    },
+    "modules": [
+      {
+        "file": "AMDFamily0F.bin",
+        "sha256": "1788550c02100ad6bbc91604399ed6e055058ea0f6c0c828c02d9b01a09ad27f",
+        "source": "AMDFamily0F.p"
+      },
+      {
+        "file": "AMDFamily10.bin",
+        "sha256": "79be1396621aa44eb149c5dc6d1bab4519b9cfa49a32af5e022cb9f9ca887658",
+        "source": "AMDFamily10.p"
+      },
+      {
+        "file": "AMDFamily17.bin",
+        "sha256": "099dc01d6db97ea997fec4a461e191cc64b9d7ce47c9d2153c451c56c2adcf50",
+        "source": "AMDFamily17.p"
+      },
+      {
+        "file": "IntelMSR.bin",
+        "sha256": "ed41a0d0de082f4668a9caccb9681ebbad97a8ed3452c41918dda1eb454b77a9",
+        "source": "IntelMSR.p"
+      },
+      {
+        "file": "IsaBridgeEC.bin",
+        "sha256": "7218c633384bd019cce09e8df91f74996f980765ac44dde0f22b0b5318c20f03",
+        "source": "IsaBridgeEC.p"
+      },
+      {
+        "file": "LpcACPIEC.bin",
+        "sha256": "c38fd116e7aff4d1fdb0a494e296be0a6708e5a22fc72f14587442fb7f8f7906",
+        "source": "LpcACPIEC.p"
+      },
+      {
+        "file": "LpcCrOSEC.bin",
+        "sha256": "277ed6ce6b5f647d5dae9b06c83ed39e904974b06f95598d49f4737237974776",
+        "source": "LpcCrOSEC.p"
+      },
+      {
+        "file": "LpcIO.bin",
+        "sha256": "3dcf8b2bc80ff642d97c4608511a818642b5bf315ff53df3df393d043e71d101",
+        "source": "LpcIO.p"
+      },
+      {
+        "file": "RyzenSMU.bin",
+        "sha256": "0cf0fe1296c5c38f4bee0f96352b35f14d32ab97cb58fd17600646d98507d8aa",
+        "source": "RyzenSMU.p"
+      },
+      {
+        "file": "SmbusI801.bin",
+        "sha256": "76b082a144027244fe7bbf3ca0e987e7dfa279aa87e0ccc2a6a918e10e2038e1",
+        "source": "SmbusI801.p"
+      },
+      {
+        "file": "SmbusNCT6793.bin",
+        "sha256": "385bd1b229faa44aefe2eb1f938ac629f6d897f1a4931dab5341b18b3bd432c1",
+        "source": "SmbusNCT6793.p"
+      },
+      {
+        "file": "SmbusPIIX4.bin",
+        "sha256": "3f8b44c93eb030d59fb68c6fdc6857c61313eab2b6aa0ed64595396d71bf3ea3",
+        "source": "SmbusPIIX4.p"
+      }
+    ],
+    "requiredSubmodules": [],
+    "compilerSource": "_pawn/pawn-4.1.7152-1.el9.src.rpm",
+    "buildInstructions": ".github/workflows/ci.yml"
+  },
+  "sources": [
+    {
+      "id": "LibreHardwareMonitor",
+      "version": "0.9.6",
+      "file": "LibreHardwareMonitor-0.9.6-source.tar.gz",
+      "url": "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/archive/refs/tags/v0.9.6.tar.gz",
+      "sha256": "070215b40feca5a8f5b27e2537ab4ea820347fecea8ca4860c8dd028a60a6413",
+      "prefix": "LibreHardwareMonitor-0.9.6/"
+    },
+    {
+      "id": "PawnIO.Modules",
+      "version": "0.2.2",
+      "file": "PawnIO.Modules-0.2.2-source.tar.gz",
+      "url": "https://github.com/namazso/PawnIO.Modules/archive/refs/tags/0.2.2.tar.gz",
+      "sha256": "27a6c0bb267f5dce3ebbb4b316501bfcbe7b1b1cf8bd3b21c7fa562520c73053",
+      "prefix": "PawnIO.Modules-0.2.2/"
+    }
+  ]
+}

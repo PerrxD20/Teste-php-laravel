@@ -18,8 +18,9 @@
     "prepare:smartctl": "node scripts/prepare-smartctl.mjs",
     "prepare:pawnio": "node scripts/prepare-pawnio.mjs",
     "build:sensors": "pwsh -File scripts/build-sensors.ps1",
-    "prepare:native": "npm run build:sensors && npm run prepare:smartctl && npm run prepare:pawnio",
-    "test:native": "node scripts/test-native-windows.mjs"
+    "prepare:native": "npm run build:sensors && npm run prepare:sensor-sources && npm run prepare:smartctl && npm run prepare:pawnio",
+    "test:native": "node scripts/test-native-windows.mjs",
+    "prepare:sensor-sources": "node scripts/prepare-sensor-sources.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",

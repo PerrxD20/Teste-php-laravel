@@ -55,7 +55,45 @@ async function verifiedArtifact(artifact) {
 
 const installer = await verifiedArtifact(upstream.installer);
 const source = await verifiedArtifact(upstream.source);
-const sevenZip = await getPath7za(); // Pinned electron-builder toolset verifies its own artifact digest.
+// electron-builder's Windows 7za is a reduced-codec binary and cannot open
+// this upstream NSIS installer. GitHub's Windows runner supplies full 7-Zip.
+async function resolveSevenZip() {
+  if (process.env.MELLO_7ZIP) return path.resolve(process.env.MELLO_7ZIP);
+  if (process.platform !== "win32") return getPath7za();
+  const candidates = [
+    path.join(
+      process.env.ProgramW6432 || "C:\\Program Files",
+      "7-Zip",
+      "7z.exe",
+    ),
+    path.join(
+      process.env.ProgramFiles || "C:\\Program Files",
+      "7-Zip",
+      "7z.exe",
+    ),
+  ];
+  for (const candidate of new Set(candidates)) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  throw new Error(
+    "Preparing smartctl on Windows requires full 7-Zip (7z.exe, including the NSIS codec). Install official 7-Zip or set MELLO_7ZIP to its executable path. This is a build-tool requirement only; Mello users do not need 7-Zip.",
+  );
+}
+const sevenZip = await resolveSevenZip();
+const codecs = await execute(sevenZip, ["i"], {
+  windowsHide: true,
+  timeout: 15000,
+  maxBuffer: 2 * 1024 * 1024,
+});
+if (!/nsis/i.test(codecs.stdout))
+  throw new Error(
+    "The selected 7-Zip tool does not include the NSIS codec. Set MELLO_7ZIP to full 7z.exe; the reduced 7za build is insufficient.",
+  );
 const temporary = await fs.mkdtemp(path.join(cache, "extract-"));
 try {
   await execute(

@@ -41,6 +41,7 @@ for (const file of [
   "sensors/Mello.SensorCollector.exe",
   "sensors/LibreHardwareMonitorLib.dll",
   "sensors/coreclr.dll",
+  "sensors/source/SOURCE-PROVENANCE.json",
   "smartctl/smartctl.exe",
   "smartctl/drivedb.h",
   "smartctl/COPYING.txt",

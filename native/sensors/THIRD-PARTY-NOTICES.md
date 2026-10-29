@@ -20,10 +20,12 @@ it nor elevates permissions. CPU/board sensor coverage can depend on PawnIO
 hardware or virtual machines. Opening this collector never changes fan curves,
 clock settings, voltages or hardware control parameters.
 
-LibreHardwareMonitorLib embeds the **unmodified signed PawnIO.Modules 0.1.6**
-bytecode modules, licensed under LGPL 2.1. Their license and upstream provenance
+LibreHardwareMonitorLib embeds the **unmodified signed PawnIO.Modules 0.2.2**
+bytecode modules, licensed under LGPL 2.1 or later. Every embedded module hash
+was matched to the official 0.2.2 release; the upstream resource README mentioning
+0.1.6 is stale. Their license and upstream provenance
 are included in `licenses/PawnIO-Modules-*`. Corresponding source:
-https://github.com/namazso/PawnIO.Modules/tree/0.1.6 . This is distinct from
+https://github.com/namazso/PawnIO.Modules/tree/0.2.2 . This is distinct from
 redistributing or installing the PawnIO kernel driver. Libraries remain separate,
 replaceable DLLs; this application does not restrict replacement/debugging of
 these third-party components for the purposes permitted by their licenses.
@@ -31,3 +33,9 @@ these third-party components for the purposes permitted by their licenses.
 Mono.Posix.NETStandard is a transitive NuGet compatibility dependency whose
 runtime/native assets are explicitly excluded from this Windows distribution.
 The Windows-specific LibreHardwareMonitorLib assembly does not reference it.
+
+The complete corresponding source archives for LibreHardwareMonitor 0.9.6 and
+PawnIO.Modules 0.2.2 accompany this distribution in `source/`, including the
+module headers, build scripts and compiler source RPM. `source/SOURCE-PROVENANCE.json`
+records pinned archive digests, upstream commits and every embedded module hash.
+This version does not use PawnPP or any git submodules.
