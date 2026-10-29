@@ -65,7 +65,7 @@ A compatibilidade WMI com monitores externos permanece como alternativa, não re
 
 ### Drivers no Windows e macOS
 
-A consulta ao Windows Update é somente leitura e pode demorar até 90 segundos. Ofertas com hardware ID correspondente são sinalizadas; ausência de oferta não certifica que todos os drivers estão atualizados. Não há instalação automática. A rede externa só é usada nessa consulta solicitada pelo usuário.
+A consulta ao Windows Update é somente leitura e pode demorar até 90 segundos. Ofertas com hardware ID correspondente são sinalizadas; ausência de oferta não certifica que todos os drivers estão atualizados. Não há instalação automática. Essa consulta usa a rede externa quando solicitada pelo usuário; o download opcional do PawnIO, descrito acima, também exige internet.
 
 No macOS, drivers integrados acompanham a atualização do sistema. Confira Ajustes do Sistema → Geral → Atualização de Software e o suporte do fabricante para extensões de terceiros. O inventário de extensões legadas não inclui necessariamente DriverKit/system extensions modernos nem drivers embutidos no kernel.
 
