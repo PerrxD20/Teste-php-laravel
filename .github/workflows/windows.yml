@@ -35,6 +35,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Build interface for integration tests
+        run: npm run build
       - name: Unit and local API tests
         run: npm test
       - name: Build Windows installer and portable
