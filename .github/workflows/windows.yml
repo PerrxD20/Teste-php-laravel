@@ -44,7 +44,17 @@ jobs:
       - name: Unit and local API tests
         run: npm test
       - name: Build Windows installer and portable
-        run: npm run dist:win
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          npm run dist:win 2>&1 | Tee-Object -FilePath native-build.log
+          $result = $LASTEXITCODE
+          if ($result -ne 0) {
+            $tail = (Get-Content native-build.log -Tail 35) -join "`n"
+            $message = $tail.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Windows build diagnostic::$message"
+          }
+          exit $result
       - name: Test incorporated native collectors
         run: npm run test:native
       - name: Verify complete distribution and generate hashes
