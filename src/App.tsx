@@ -1,3 +1,5 @@
+import { version as APP_VERSION } from "../package.json";
+const isDesktop = navigator.userAgent.includes("Electron/");
 import {
   useEffect,
   useRef,
@@ -345,7 +347,7 @@ export default function App() {
     if (!snapshot) return;
     const report = {
       app: "Mello PC Diagnostic",
-      version: "1.0.0",
+      version: APP_VERSION,
       exportedAt: new Date().toISOString(),
       demonstration: demo,
       snapshot,
@@ -1854,7 +1856,7 @@ export default function App() {
         <footer>
           <span>
             <span className="status-dot" />
-            MELLO PC DIAGNOSTIC <small>v1.0</small>
+            MELLO PC DIAGNOSTIC <small>v{APP_VERSION}</small>
             <span className="footer-divider" />
             Feito para conhecer. Projetado para cuidar.
           </span>
@@ -1863,7 +1865,7 @@ export default function App() {
             {demo
               ? "Modo demonstração · dados ilustrativos"
               : snapshot
-                ? `Dados de ${snapshot.host.name}${snapshot.host.virtual ? " · ambiente virtual" : ""} · não do dispositivo do navegador`
+                ? `Dados de ${snapshot.host.name}${snapshot.host.virtual ? " · ambiente virtual" : ""}${isDesktop ? " · coleta local" : " · não do dispositivo do navegador"}`
                 : "Coleta local · sem envio de telemetria"}
           </span>
         </footer>
@@ -1897,7 +1899,7 @@ export default function App() {
             <>
               <p className="body-copy">
                 Configure as leituras desta sessão. Todas as informações são
-                coletadas pelo servidor local.
+                coletadas localmente pelo programa.
               </p>
               <div className="setting-row">
                 <div>
@@ -1946,7 +1948,7 @@ export default function App() {
                 <strong>
                   MELLO <span>PC DIAGNOSTIC</span>
                 </strong>
-                <Badge tone="green">1.0</Badge>
+                <Badge tone="green">{APP_VERSION}</Badge>
               </div>
               <p className="body-copy">
                 Um lugar para entender seu computador: hardware, armazenamento,
@@ -1975,9 +1977,9 @@ export default function App() {
               <div className="info-callout">
                 <Info size={18} />
                 <p>
-                  Se você abriu uma versão hospedada, as leituras são do
-                  servidor. Para analisar seu próprio PC ou Mac, execute o
-                  programa localmente.
+                  {isDesktop
+                    ? "Esta versão desktop analisa o computador em que está sendo executada. Os relatórios são salvos por você, sem envio de telemetria."
+                    : "Se você abriu uma versão hospedada, as leituras são do servidor. Para analisar seu próprio PC ou Mac, execute o programa localmente."}
                 </p>
               </div>
             </>

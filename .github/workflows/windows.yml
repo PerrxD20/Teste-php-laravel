@@ -1,0 +1,85 @@
+name: Windows executables
+on:
+  push:
+    branches: [mello-pc-diagnostic]
+    paths:
+      - src/**
+      - server/**
+      - desktop/**
+      - build/**
+      - scripts/**
+      - tests/**
+      - package.json
+      - package-lock.json
+      - electron-builder.yml
+      - vite.config.ts
+      - tsconfig.json
+      - index.html
+      - public/**
+      - .github/workflows/windows.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Unit and local API tests
+        run: npm test
+      - name: Build Windows installer and portable
+        run: npm run dist:win
+      - name: Verify complete distribution and generate hashes
+        run: npm run verify:win
+      - name: Test packaged Windows application
+        shell: pwsh
+        run: |
+          $env:MELLO_DESKTOP_EXECUTABLE = Join-Path $PWD 'release/win-unpacked/Mello PC Diagnostic.exe'
+          npm run test:desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test installing and running the installed application
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $target = Join-Path $env:RUNNER_TEMP 'MelloInstalled'
+          $setup = Join-Path $PWD "release/Mello-PC-Diagnostic-Setup-$version-x64.exe"
+          $installed = Start-Process -FilePath $setup -ArgumentList @('/S', "/D=$target") -Wait -PassThru
+          if ($installed.ExitCode -ne 0) { throw "Installer returned $($installed.ExitCode)" }
+          $env:MELLO_DESKTOP_EXECUTABLE = Join-Path $target 'Mello PC Diagnostic.exe'
+          if (!(Test-Path $env:MELLO_DESKTOP_EXECUTABLE)) { throw 'Installed executable missing' }
+          npm run test:desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $uninstaller = Join-Path $target 'Uninstall Mello PC Diagnostic.exe'
+          if (Test-Path $uninstaller) { Start-Process -FilePath $uninstaller -ArgumentList '/S' -Wait }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mello-PC-Diagnostic-Windows-x64
+          path: |
+            release/*-Setup-*.exe
+            release/*-Portable-*.exe
+            release/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: Publish downloadable Windows release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Mello PC Diagnostic $version" --notes-file RELEASE-NOTES.md
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          gh release upload $tag "release/Mello-PC-Diagnostic-Setup-$version-x64.exe" "release/Mello-PC-Diagnostic-Portable-$version-x64.exe" 'release/SHA256SUMS.txt' --repo $env:GITHUB_REPOSITORY --clobber
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

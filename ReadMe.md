@@ -2,9 +2,20 @@
 
 Aplicativo local de diagnóstico com interface em português, inspirado na referência fornecida: fundo escuro, indicadores verdes/cianos e abas Sistema, Armazenamento, Drivers, Memória RAM e Temperatura. Inclui coleta nativa por Node.js e uma interface React responsiva. **Não existe aplicação Laravel neste repositório.**
 
-## Executar no seu computador
+## Instalar no Windows (sem Node.js)
 
-Requer **Node.js 22 ou superior** e npm. Depois de baixar o projeto:
+Na página [Releases do GitHub](https://github.com/PerrxD20/Teste-php-laravel/releases), baixe a versão publicada:
+
+- `Mello-PC-Diagnostic-Setup-1.1.0-x64.exe`: instala o programa, permite escolher a pasta e cria atalhos e desinstalador.
+- `Mello-PC-Diagnostic-Portable-1.1.0-x64.exe`: abre sem instalação. A extração inicial pode levar alguns segundos.
+
+Requer Windows 10/11 de 64 bits. A interface, o coletor e o runtime estão incluídos. O usuário final não precisa instalar Node.js nem manter um terminal aberto. O aplicativo abre em uma janela própria; ao encerrar, seu coletor também é encerrado. Os relatórios são salvos pelo diálogo de arquivos do sistema.
+
+Os arquivos não possuem assinatura digital de editor; o Windows pode apresentar um aviso de editor desconhecido. Confira os hashes do arquivo `SHA256SUMS.txt` publicado junto à versão. Sensores e SMART continuam sujeitos às permissões e à compatibilidade descritas abaixo.
+
+## Executar a partir do código-fonte (Windows, macOS e Linux)
+
+Requer **Node.js 22.12 ou superior** e npm. Depois de baixar o projeto:
 
 ```bash
 npm ci
@@ -82,4 +93,19 @@ Testes cobrem interpretação SMART/NVMe, indicadores ausentes, alerta de falha,
 - `server/index.js`: API local e distribuição da interface compilada.
 - `scripts/launch.mjs`: inicialização e abertura do navegador.
 
-Este projeto é uma primeira versão funcional de um programa local; não inclui instalador assinado ou executável desktop independente do Node.js.
+## Compilar a versão desktop
+
+```bash
+npm ci
+npm run desktop
+npm run dist:win
+npm run verify:win
+```
+
+`dist:win` gera o instalador NSIS e o executável portátil para Windows x64 na pasta `release/`. A compilação não publica automaticamente arquivos (`--publish never`). A edição de ícone e metadados PE é feita pelo hook `build/after-pack.mjs`, preservando a verificação dos downloads oficiais do Electron; o aplicativo resultante é explicitamente não assinado. No Linux, a geração do desinstalador NSIS exige Wine 64; a execução de testes da janela exige um display/Xvfb. Windows é o host recomendado para reproduzir a distribuição.
+
+A automação `.github/workflows/windows.yml` usa um runner Windows para compilar, verificar os arquivos, testar a janela e a RAM na aplicação empacotada, instalar em uma pasta temporária, testar a versão instalada e publicar os dois executáveis e hashes em Releases. Ela é acionada por alterações do aplicativo na branch `mello-pc-diagnostic` e pode ser disparada manualmente. A publicação usa o token do próprio GitHub Actions; não inclua tokens pessoais no repositório.
+
+O coletor desktop usa uma porta local livre e exige um token aleatório anexado apenas pela sessão da janela. O renderer tem sandbox e isolamento de contexto, não tem integração Node e não aceita navegação externa. O código-fonte mantém o modo web de desenvolvimento anterior. `npm run test:desktop` testa a janela; `MELLO_DESKTOP_EXECUTABLE` permite apontar para a versão instalada ou empacotada.
+
+O instalador `.exe` é específico para Windows; as funções de coleta para macOS permanecem no código-fonte. Uma distribuição `.dmg` assinada/notarizada não faz parte desta compilação.

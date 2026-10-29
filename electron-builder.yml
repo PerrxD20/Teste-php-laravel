@@ -1,0 +1,48 @@
+appId: com.mello.pcdiagnostic
+productName: Mello PC Diagnostic
+electronVersion: 45.1.0
+asar: false
+npmRebuild: false
+compression: maximum
+artifactName: Mello-PC-Diagnostic-${version}-${arch}.${ext}
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - server/**/*.js
+  - desktop/**/*.mjs
+  - build/icons/mello.png
+  - package.json
+  - "!**/*.map"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,readme.md,test,tests,example,examples}"
+electronLanguages:
+  - pt-BR
+  - en-US
+afterPack: ./build/after-pack.mjs
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+  icon: build/icons/mello.ico
+  signAndEditExecutable: false
+  requestedExecutionLevel: asInvoker
+nsis:
+  artifactName: Mello-PC-Diagnostic-Setup-${version}-${arch}.exe
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Mello PC Diagnostic
+  deleteAppDataOnUninstall: false
+  installerIcon: build/icons/mello.ico
+  uninstallerIcon: build/icons/mello.ico
+  installerLanguages: [pt_BR, en_US]
+  language: 1046
+portable:
+  artifactName: Mello-PC-Diagnostic-Portable-${version}-${arch}.exe
+  requestExecutionLevel: user
