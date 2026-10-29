@@ -10,10 +10,11 @@ import { sensorClient } from "./sensor-client.js";
 export const stopNativeCollectors = () => sensorClient.stop();
 export const restartNativeCollectors = () => sensorClient.stop();
 const exec = promisify(execFile);
-export async function command(file, args, timeout = 15000) {
+export async function command(file, args, timeout = 15000, options = {}) {
   try {
     return (
       await exec(file, args, {
+        ...options,
         timeout,
         windowsHide: true,
         maxBuffer: 8 * 1024 * 1024,
@@ -30,10 +31,35 @@ export async function powershell(script, timeout = 20000) {
       script,
     "utf16le",
   ).toString("base64");
+  const shellHome = path.join(
+    process.env.SystemRoot || "C:/Windows",
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+  );
+  const environment = { ...process.env };
+  for (const key of Object.keys(environment))
+    if (key.toLowerCase() === "psmodulepath") delete environment[key];
+  environment.PSModulePath = [
+    path.join(shellHome, "Modules"),
+    path.join(
+      process.env.ProgramFiles || "C:/Program Files",
+      "WindowsPowerShell",
+      "Modules",
+    ),
+  ].join(";");
   const result = await command(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+    path.join(shellHome, "powershell.exe"),
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-OutputFormat",
+      "Text",
+      "-EncodedCommand",
+      encoded,
+    ],
     timeout,
+    { env: environment },
   );
   return JSON.parse(result.replace(/^\uFEFF/, "").trim() || "null");
 }

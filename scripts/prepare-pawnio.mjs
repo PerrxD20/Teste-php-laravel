@@ -77,15 +77,51 @@ if (process.platform !== "win32") {
     `PawnIO ${manifest.version}: official installer and corresponding source SHA-256 verified. Authenticode remains unchecked; no distribution staged. Cache: ${cache}`,
   );
 } else {
-  const signatureScript = `$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $s=Get-AuthenticodeSignature -LiteralPath $env:MELLO_PAWNIO_VERIFY_FILE; [PSCustomObject]@{status=[string]$s.Status; signerSubject=$s.SignerCertificate.Subject; signerThumbprint=$s.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress`;
+  // GitHub's pwsh host can export its PowerShell 7 PSModulePath to this
+  // classic Windows PowerShell child. Use only the matching built-in modules.
+  const windowsRoot =
+    process.env.SystemRoot || process.env.WINDIR || "C:\\Windows";
+  const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+  const powershellRoot = path.win32.join(
+    windowsRoot,
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+  );
+  const builtinModules = path.win32.join(powershellRoot, "Modules");
+  const classicEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) => name.toLowerCase() !== "psmodulepath",
+    ),
+  );
+  const signatureScript = `$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Import-Module -Name $env:MELLO_CLASSIC_SECURITY_MODULE -ErrorAction Stop; $s=Get-AuthenticodeSignature -LiteralPath $env:MELLO_PAWNIO_VERIFY_FILE; [PSCustomObject]@{status=[string]$s.Status; signerSubject=$s.SignerCertificate.Subject; signerThumbprint=$s.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress`;
   const encoded = Buffer.from(signatureScript, "utf16le").toString("base64");
   const result = await exec(
-    "powershell.exe",
-    ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+    path.win32.join(powershellRoot, "powershell.exe"),
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-OutputFormat",
+      "Text",
+      "-EncodedCommand",
+      encoded,
+    ],
     {
       timeout: 60000,
       windowsHide: true,
-      env: { ...process.env, MELLO_PAWNIO_VERIFY_FILE: installer },
+      env: {
+        ...classicEnvironment,
+        PSModulePath: [
+          builtinModules,
+          path.win32.join(programFiles, "WindowsPowerShell", "Modules"),
+        ].join(";"),
+        MELLO_CLASSIC_SECURITY_MODULE: path.win32.join(
+          builtinModules,
+          "Microsoft.PowerShell.Security",
+          "Microsoft.PowerShell.Security.psd1",
+        ),
+        MELLO_PAWNIO_VERIFY_FILE: installer,
+      },
     },
   );
   const signature = JSON.parse(result.stdout.replace(/^\uFEFF/, "").trim());
