@@ -1,0 +1,36 @@
+{
+  "name": "mello-pc-diagnostic",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Diagnóstico local de hardware e software com interface em português",
+  "scripts": {
+    "dev": "concurrently -k -n coleta,interface \"node --watch server/index.js\" \"vite --host 0.0.0.0\"",
+    "build": "tsc --noEmit && vite build",
+    "start": "node server/index.js",
+    "test": "node --test tests/*.test.js",
+    "app": "node scripts/launch.mjs",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "@fontsource-variable/dm-sans": "^5.3.0",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "express": "^5.1.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "systeminformation": "^5.27.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
